@@ -1,0 +1,120 @@
+1.1	Source data details
+Download the stats created for year 2008 & 2007.
+http://stat-computing.org/dataexpo/2009/the-data.html
+
+# use wget to download data files into local file system
+cd /home/vimalathi/flight
+wget http://stat-computing.org/dataexpo/2009/2007.csv.bz2
+wget http://stat-computing.org/dataexpo/2009/2008.csv.bz2
+
+# to uncompress from bz2 to text file
+bzip2 -dk ./*.csv.bz2
+
+# check whether files having header or not using head / awk cmd(head will be faster)
+head -n 1 ./2007.csv
+awk 'NR==1' ./2008.csv
+
+# remove headers and save as new file using sed cmd (if required)
+sed '1d' ./2007.csv > ./noheader2007.csv
+sed '1d' ./2008.csv > ./noheader2008.csv
+
+
+# create topics in kafka to load the data
+export KAFKA_HOME=/usr/hdp/2.6.5.0-292/kafka
+export PATH=$PATH:$KAFKA_HOME/bin
+
+kafka-topics.sh --create --zookeeper nn01.bigdata-labs.com:2181 --replication-factor 1 --partitions 1 --topic airports
+kafka-topics.sh --create --zookeeper nn01.bigdata-labs.com:2181 --replication-factor 1 --partitions 1 --topic carriers
+kafka-topics.sh --create --zookeeper nn01.bigdata-labs.com:2181 --replication-factor 1 --partitions 1 --topic plane_data
+kafka-topics.sh --create --zookeeper nn01.bigdata-labs.com:2181 --replication-factor 1 --partitions 2 --topic otp
+
+# create and config source config file for aiports topic
+touch kafka-connect-fs_airports.properties
+# ----begin congif------------------------
+name=local-file-source
+connector.class=FileStreamSource
+tasks.max=1
+file=/home/vimalathi/flight/airports.csv
+topic=airports
+
+# ------ end of config -------------------
+
+# config connect-standalone_airports.properties
+
+# ------ begining of config --------------
+bootstrap.servers=localhost:9092
+
+# The converters specify the format of data in Kafka and how to translate it into Connect data. Every Connect user will
+# need to configure these based on the format they want their data in when loaded from or stored into Kafka
+key.converter=org.apache.kafka.connect.storage.StringConverter
+value.converter=org.apache.kafka.connect.storage.StringConverter
+# Converter-specific settings can be passed in by prefixing the Converter's setting with the converter we want to apply
+# it to
+key.converter.schemas.enable=true
+value.converter.schemas.enable=true
+
+# The internal converter used for offsets and config data is configurable and must be specified, but most users will
+# always want to use the built-in default. Offset and config data is never visible outside of Kafka Connect in this format.
+internal.key.converter=org.apache.kafka.connect.json.JsonConverter
+internal.value.converter=org.apache.kafka.connect.json.JsonConverter
+internal.key.converter.schemas.enable=false
+internal.value.converter.schemas.enable=false
+
+offset.storage.file.filename=/home/vimalathi/kafkaOffsets/airports.offsets
+# Flush much faster than normal, which is useful for testing/debugging
+offset.flush.interval.ms=10000
+
+# ------ end of config -------------------
+
+# config connect-distributed_airports.properties file if it is distibuted mode
+
+# ------- begin ----------------------------
+
+# These are defaults. This file just demonstrates how to override some settings.
+bootstrap.servers=localhost:9092
+
+# unique name for the cluster, used in forming the Connect cluster group. Note that this must not conflict with consumer group IDs
+group.id=connect-flight-cluster
+
+# The converters specify the format of data in Kafka and how to translate it into Connect data. Every Connect user will
+# need to configure these based on the format they want their data in when loaded from or stored into Kafka
+key.converter=org.apache.kafka.connect.storage.StringConverter
+value.converter=org.apache.kafka.connect.storage.StringConverter
+# Converter-specific settings can be passed in by prefixing the Converter's setting with the converter we want to apply
+# it to
+key.converter.schemas.enable=true
+value.converter.schemas.enable=true
+
+# The internal converter used for offsets and config data is configurable and must be specified, but most users will
+# always want to use the built-in default. Offset and config data is never visible outside of Kafka Connect in this format.
+internal.key.converter=org.apache.kafka.connect.json.JsonConverter
+internal.value.converter=org.apache.kafka.connect.json.JsonConverter
+internal.key.converter.schemas.enable=false
+internal.value.converter.schemas.enable=false
+
+# Topic to use for storing offsets. This topic should have many partitions and be replicated.
+offset.storage.topic=connect-offsets
+
+# Topic to use for storing connector and task configurations; note that this should be a single partition, highly replicated topic.
+# You may need to manually create the topic to ensure single partition for the config topic as auto created topics may have multiple partitions.
+config.storage.topic=connect-configs
+
+# Topic to use for storing statuses. This topic can have multiple partitions and should be replicated.
+status.storage.topic=connect-status
+
+# Flush much faster than normal, which is useful for testing/debugging
+offset.flush.interval.ms=10000
+
+# ----- end of config---------------------------
+
+# start the kafka connect 
+connect-standalone.sh /home/vimalathi/flight/code/connect-standalone_airports.properties /home/vimalathi/flight/code/kafka-connect-fs_airports.properties
+
+connect-distributed.sh /home/vimalathi/flight/code/connect-distributed_airports.properties /home/vimalathi/flight/code/kafka-connect-fs_airports.properties
+
+bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic connect-test --from-beginning
+
+kafka-console-producer.sh --broker-list nn01.bigdata-labs.com:6667 --topic airports < /home/vimalathi/flight/noheader_airports.csv
+
+
+

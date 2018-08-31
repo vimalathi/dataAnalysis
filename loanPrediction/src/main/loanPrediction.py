@@ -1,5 +1,4 @@
 import pandas as pd
-from time import time
 from pyelasticsearch import ElasticSearch
 
 CHUNKSIZE = 100
@@ -34,9 +33,9 @@ test = pd.read_csv(test_data_path)
 
 # insert data into elastic search
 index_name_train = "loan_prediction_train"
-doc_type_train = "av-lp_train"
+doc_type_train = "lp_train"
 index_name_test = "loan_prediction_test"
-doc_type_test = "av-lp_test"
+doc_type_test = "lp_test"
 
 # indexing train data
 index_data(train_data_path, CHUNKSIZE, index_name_train, doc_type_train)
